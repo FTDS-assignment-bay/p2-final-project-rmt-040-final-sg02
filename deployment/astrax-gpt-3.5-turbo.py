@@ -119,14 +119,11 @@ load_dotenv()
 MONGODB_URI = os.environ.get("MONGO_URI")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 
-# Initialize Embeddings
-embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_KEY)
-
 # MongoDB Connection with Caching
 @st.cache_resource
 def init_mongodb():
     try:
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        client = MongoClient(MONGODB_URI)
         client.server_info()
         return client['Astrax_db']['Astrax']
     except Exception as e:
@@ -135,12 +132,14 @@ def init_mongodb():
 
 collection = init_mongodb()
 
+# Initialize Embeddings
+embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_KEY)
+
 # Vector Store Configuration
 vector_store = MongoDBAtlasVectorSearch(
     collection=collection,
     embedding=embeddings,
-    index_name='vector_index',
-    text_key="text"
+    index_name='vector_index'
 )
 
 # Model Definition
@@ -148,17 +147,25 @@ llm = ChatOpenAI(model_name="gpt-3.5-turbo", openai_api_key=OPENAI_KEY, temperat
 
 # Create Prompt
 template = """
-You work as a customer service representative at M-Tax, a digital tax assistant for the Indonesian Directorate General of Taxes whose job is to help taxpayers understand tax-related information.. 
-Your responsibility is to give accurate answers to customer questions. 
-All responses should and must be in Indonesian and based on data that was already given. 
-Your responses should be polite, professional, and helpful. 
-Don’t answer to any questions or inquiries that are not related to M-Tax or digital tax services provided by the Indonesian Government. 
-And do not explain any application outside M-Tax digital tax services.
+Anda adalah asisten digital resmi bernama M-Tax yang bekerja untuk Direktorat Jenderal Pajak Indonesia. 
+Tugas Anda adalah membantu wajib pajak memahami informasi perpajakan, khususnya yang berkaitan dengan layanan digital seperti M-Tax, e-filing, e-billing, dan sistem pajak online lainnya.
+
+Jawaban Anda harus:
+- Disampaikan dalam Bahasa Indonesia,
+- Ramah, sopan, dan profesional,
+- Berdasarkan informasi dari konteks yang tersedia,
+- Fokus pada topik perpajakan dan layanan digital DJP.
+
+Jika pertanyaan tidak relevan dengan perpajakan atau layanan resmi DJP, sampaikan dengan sopan bahwa Anda hanya dapat menjawab pertanyaan seputar pajak dan layanan digital pemerintah Indonesia.
+
+---
 
 {context}
 
-**Question from user:**
+**Pertanyaan dari pengguna:**
 {question}
+
+**Jawaban M-Tax:**
 """
 
 prompt = PromptTemplate(
@@ -173,7 +180,10 @@ def create_qa_chain():
     try:
         return RetrievalQA.from_chain_type(
             llm=llm,chain_type="stuff",
-            retriever=vector_store.as_retriever(search_type="similarity",search_kwargs={"k": 3}),
+            retriever=vector_store.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 3}
+                ),
             chain_type_kwargs={"prompt": prompt}
         )
     except Exception as e:
@@ -181,32 +191,25 @@ def create_qa_chain():
         st.stop()
 
 qa = create_qa_chain()
+    
 
-def ask(question):
-    try:
-        # Proses query langsung tanpa validasi awal
-        result = qa({"query": question})
+# def ask(question):
+#     try:
+#         result = qa.invoke({"query": question})
 
-        if not result['source_documents']:
-            return "Informasi tidak ditemukan dalam database resmi. Silakan hubungi Kring Pajak 1500200"
-        else:
-            answer = result['result']
+#         st.write("Hasil QA:", result)
 
-        # Tambahkan Respons Asisten
-        with st.chat_message("assistant"):
-            st.markdown(answer)
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+#         answer = result['result'].strip()
 
-    except Exception as e:
-        error_msg = f"""
-        <div class="assistant-message">
-            ⚠️ Gangguan Sistem<br>
-            Mohon maaf, terjadi kesalahan teknis. Silakan coba lagi atau hubungi:<br>
-            • Hotline: 1500200<br>
-            • Email: djp@pajak.go.id
-        </div>
-        """
-        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+#         with st.chat_message("assistant"):
+#             st.markdown(answer)
+#         st.session_state.messages.append({"role": "assistant", "content": answer})
+        
+#         return answer
+
+#     except Exception as e:
+#         error_msg = f"Terjadi kesalahan sistem: {str(e)}\nSilakan coba lagi atau hubungi 1500200"
+#         st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
 # --- Streamlit UI ---
 if selected == "Chatbot":
@@ -265,37 +268,24 @@ if selected == "Chatbot":
             """, unsafe_allow_html=True)
 
     # Input Chat
-    prompt = st.chat_input("Tulis pertanyaan pajak Anda di sini... (Contoh: Bagaimana cara reset password DJP Online?)")
+    question = st.chat_input("Tulis pertanyaan pajak Anda di sini... (Contoh: Bagaimana cara reset password DJP Online?)")
 
-    if prompt:
+    if question:
         # Add User Message
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "user", "content": question})
         
         # Prepare Answer
         with st.spinner("Mencari informasi..."):
             try:
-                result = qa.invoke({"query": prompt})
-                
-                if not result['source_documents']:
-                    answer = "Informasi tidak ditemukan dalam database resmi. Silakan hubungi Kring Pajak 1500200"
-                else:
-                    raw_answer = result['result'].strip()
-                    answer = format_answer(raw_answer)
-                
-                # Tambahkan Respons Asisten
+                result = qa.invoke({"query": question})
+                answer = result['result'].strip()
+
                 with st.chat_message("assistant"):
                     st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
-            
+
             except Exception as e:
-                error_msg = f"""
-                <div class="assistant-message">
-                    ⚠️ Gangguan Sistem<br>
-                    Mohon maaf, terjadi kesalahan teknis. Silakan coba lagi atau hubungi:<br>
-                    • Hotline: 1500200<br>
-                    • Email: djp@pajak.go.id
-                </div>
-                """
+                error_msg = f"Terjadi kesalahan sistem: {str(e)}\nSilakan coba lagi atau hubungi 1500200"
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
     
         st.rerun()
