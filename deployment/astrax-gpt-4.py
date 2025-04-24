@@ -29,6 +29,8 @@ if theme_choice == "Light ☀️":
     selected_bg = "#2A5C82"
     selected_text = "#ffffff"
     text_color = "#ffffff"
+    bg_color = "#f8f9fa"
+    header = "#F0F4F8"
 elif theme_choice == "Dark 🌙":
     primary_color = "#ffffff"
     secondary_color = "#1E1E1E"
@@ -38,6 +40,8 @@ elif theme_choice == "Dark 🌙":
     selected_bg = "#f39c12"
     selected_text = "#000000"
     text_color = "#000000"
+    bg_color = "#252422"
+    header = "#1E1E1E"
 
 
 # --- Custom CSS ---
@@ -50,13 +54,9 @@ st.markdown(f"""
         --text: {text_color};
     }}
 
-    # .stApp {{
-    #     background-color: {secondary_color};
-    # }}
-
-    # section[data-testid="stSidebar"] {{
-    #     background-color: {sidebar_bg}
-    # }}
+    .stApp {{
+        background-color: {bg_color};
+    }}
 
     .header {{
         padding: 1rem 0;
@@ -202,15 +202,41 @@ def create_qa_chain():
 
 qa = create_qa_chain()
 
-def format_answer(raw_answer):
+def clean_answer(raw_answer):
     """Membersihkan jawaban dari referensi dan format khusus"""
-    # Hapus link PDF
-    cleaned = re.sub(r'https?://\S+\.pdf', '', raw_answer)
     # Format daftar bernomor
-    formatted = re.sub(r'(\d+\.)\s', r'\n\1 ', cleaned)
+    formatted = re.sub(r'(\d+\.)\s', r'\n\1 ', raw_answer)
     # Hapus karakter khusus
-    return re.sub(r'[*_]{2}', '', formatted).strip()
+    cleaned = re.sub(r'[*_]{2}', '', formatted)
+    return cleaned.strip()
 
+def ask(query):
+    try:
+        # Proses query langsung tanpa validasi awal
+        result = qa.invoke({"query": query})
+
+        if not result['source_documents']:
+            return "Informasi tidak ditemukan dalam database resmi. Silakan hubungi Kring Pajak 1500200"
+        else:
+            raw_answer = result['result'].strip()
+            answer = clean_answer(raw_answer)
+
+        # Tambahkan Respons Asisten
+        with st.chat_message("assistant"):
+            st.markdown(answer)
+        st.session_state.messages.append({"role": "assistant", "content": answer})
+
+    except Exception as e:
+        error_msg = f"""
+        <div class="assistant-message">
+            ⚠️ Gangguan Sistem<br>
+            Mohon maaf, terjadi kesalahan teknis. Silakan coba lagi atau hubungi:<br>
+            • Hotline: 1500200<br>
+            • Email: djp@pajak.go.id
+        </div>
+        """
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+    
 # --- Streamlit UI ---
 if selected == "Chatbot":
     with st.container():
@@ -276,30 +302,7 @@ if selected == "Chatbot":
         
         # Prepare Answer
         with st.spinner("Mencari informasi..."):
-            try:
-                result = qa.invoke({"query": prompt})
-                
-                if not result['source_documents']:
-                    answer = "Informasi tidak ditemukan dalam database resmi. Silakan hubungi Kring Pajak 1500200"
-                else:
-                    raw_answer = result['result'].strip()
-                    answer = format_answer(raw_answer)
-                
-                # Tambahkan Respons Asisten
-                with st.chat_message("assistant"):
-                    st.markdown(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-            
-            except Exception as e:
-                error_msg = f"""
-                <div class="assistant-message">
-                    ⚠️ Gangguan Sistem<br>
-                    Mohon maaf, terjadi kesalahan teknis. Silakan coba lagi atau hubungi:<br>
-                    • Hotline: 1500200<br>
-                    • Email: djp@pajak.go.id
-                </div>
-                """
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            ask(prompt)
     
         st.rerun()
 
