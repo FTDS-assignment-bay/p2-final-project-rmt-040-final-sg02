@@ -120,11 +120,7 @@ MONGODB_URI = os.environ.get("MONGO_URI")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 
 # Initialize Embeddings
-embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-small",
-    openai_api_key=OPENAI_KEY,
-    dimensions=1536
-)
+embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_KEY)
 
 # MongoDB Connection with Caching
 @st.cache_resource
