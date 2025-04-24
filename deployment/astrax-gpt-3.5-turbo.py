@@ -191,25 +191,6 @@ def create_qa_chain():
         st.stop()
 
 qa = create_qa_chain()
-    
-
-# def ask(question):
-#     try:
-#         result = qa.invoke({"query": question})
-
-#         st.write("Hasil QA:", result)
-
-#         answer = result['result'].strip()
-
-#         with st.chat_message("assistant"):
-#             st.markdown(answer)
-#         st.session_state.messages.append({"role": "assistant", "content": answer})
-        
-#         return answer
-
-#     except Exception as e:
-#         error_msg = f"Terjadi kesalahan sistem: {str(e)}\nSilakan coba lagi atau hubungi 1500200"
-#         st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
 # --- Streamlit UI ---
 if selected == "Chatbot":
